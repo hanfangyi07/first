@@ -1,26 +1,33 @@
 // OnlineGameView.java
 package view;
 
-import controller.GameController;
+import controller.NetworkGameController;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 public class OnlineGameView extends JFrame {
     private ChessBoardView chessBoard;
-    private GameController controller;
+    private NetworkGameController controller;
     private JLabel statusLabel;
     private JLabel opponentInfo;
     private JButton undoBtn;
     private JButton restartBtn;
     private JButton musicBtn;
     private JButton surrenderBtn;
+    private JButton disconnectBtn;
     private ChatPanel chatPanel;
     private String playerName;
-    private String opponentName;
+    private boolean isHost;
+    private String host; // 添加host字段
+    private int port;    // 添加port字段
     
-    public OnlineGameView(String playerName, String opponentName, boolean isHost) {
+    public OnlineGameView(String playerName, String host, int port, boolean isHost) {
         this.playerName = playerName;
-        this.opponentName = opponentName;
+        this.host = host;      // 保存host参数
+        this.port = port;      // 保存port参数  
+        this.isHost = isHost;
         
         setTitle("五子棋 - 网络对战 (" + (isHost ? "房主" : "玩家") + ")");
         setSize(1100, 750);
@@ -32,11 +39,28 @@ public class OnlineGameView extends JFrame {
         // 初始化棋盘
         int boardSize = 15;
         chessBoard = new ChessBoardView(boardSize, null);
-        controller = new GameController(boardSize, chessBoard, null);
+        
+        // 初始化聊天面板
+        chatPanel = new ChatPanel(playerName);
+        
+        // 创建状态标签
+        statusLabel = new JLabel("正在连接...", JLabel.CENTER);
+        statusLabel.setFont(new Font("宋体", Font.BOLD, 18));
+        
+        // 创建控制器
+        controller = new NetworkGameController(boardSize, chessBoard, chatPanel, statusLabel, playerName, isHost);
         chessBoard.setController(controller);
         
+        // 设置聊天面板的发送消息回调
+        chatPanel.setSendMessageCallback(new ChatPanel.SendMessageCallback() {
+            @Override
+            public void onSendMessage(String message) {
+                controller.sendChatMessage(message);
+            }
+        });
+        
         // 顶部信息面板
-        JPanel topPanel = createTopPanel(isHost);
+        JPanel topPanel = createTopPanel();
         add(topPanel, BorderLayout.NORTH);
         
         // 主内容面板
@@ -50,37 +74,54 @@ public class OnlineGameView extends JFrame {
         // 功能按钮面板
         JPanel functionPanel = createFunctionPanel();
         rightPanel.add(functionPanel);
-        
-        // 聊天面板
-        chatPanel = new ChatPanel(playerName);
         rightPanel.add(chatPanel);
         
         mainPanel.add(rightPanel, BorderLayout.EAST);
         add(mainPanel, BorderLayout.CENTER);
         
-        // 更新控制器
-        controller.setStatusLabel(statusLabel);
-        
         setVisible(true);
         
-        // 模拟接收欢迎消息
-        SwingUtilities.invokeLater(() -> {
-            chatPanel.receiveMessage("系统", "欢迎来到五子棋网络对战！");
-            chatPanel.receiveMessage("系统", "你的对手: " + opponentName);
+        // 连接网络 - 现在使用保存的host和port
+        connectToNetwork();
+        
+        // 窗口关闭事件
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent windowEvent) {
+                controller.disconnect();
+            }
         });
     }
     
-    private JPanel createTopPanel(boolean isHost) {
+    // 修改connectToNetwork方法，不使用参数
+    private void connectToNetwork() {
+        new Thread(() -> {
+            boolean success;
+            if (isHost) {
+                success = controller.createRoom(port); // 使用保存的port
+            } else {
+                success = controller.joinRoom(host, port); // 使用保存的host和port
+            }
+            
+            if (!success) {
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this, "连接失败，请检查网络设置", "错误", JOptionPane.ERROR_MESSAGE);
+                    new NetworkSetupView();
+                    dispose();
+                });
+            }
+        }).start();
+    }
+    
+    private JPanel createTopPanel() {
         JPanel panel = new JPanel(new GridLayout(2, 1));
         panel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
         
         // 状态标签
-        statusLabel = new JLabel("当前回合: " + (isHost ? "黑棋(你)" : "等待对手"), JLabel.CENTER);
         statusLabel.setFont(new Font("宋体", Font.BOLD, 18));
         
-        // 对手信息
-        String hostInfo = isHost ? " (房主)" : "";
-        opponentInfo = new JLabel("你: " + playerName + hostInfo + " | 对手: " + opponentName, JLabel.CENTER);
+        // 玩家信息
+        opponentInfo = new JLabel("你: " + playerName + (isHost ? " (房主)" : ""), JLabel.CENTER);
         opponentInfo.setFont(new Font("宋体", Font.PLAIN, 14));
         
         panel.add(statusLabel);
@@ -94,25 +135,53 @@ public class OnlineGameView extends JFrame {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(BorderFactory.createTitledBorder("游戏控制"));
         
-        undoBtn = new JButton("悔棋");
+        undoBtn = new JButton("请求悔棋");
         restartBtn = new JButton("重新开始");
         musicBtn = new JButton("播放音乐");
         surrenderBtn = new JButton("认输");
+        disconnectBtn = new JButton("断开连接");
         
         Dimension btnSize = new Dimension(120, 40);
         undoBtn.setPreferredSize(btnSize);
         restartBtn.setPreferredSize(btnSize);
         musicBtn.setPreferredSize(btnSize);
         surrenderBtn.setPreferredSize(btnSize);
+        disconnectBtn.setPreferredSize(btnSize);
         
-        // 网络对战暂时禁用悔棋和重新开始
-        undoBtn.setEnabled(false);
-        restartBtn.setEnabled(false);
+        undoBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                controller.requestUndo();
+            }
+        });
         
-        undoBtn.addActionListener(e -> controller.undoMove());
-        restartBtn.addActionListener(e -> controller.resetGame());
-        musicBtn.addActionListener(e -> toggleMusic());
-        surrenderBtn.addActionListener(e -> surrender());
+        restartBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                controller.restartGame();
+            }
+        });
+        
+        musicBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                toggleMusic();
+            }
+        });
+        
+        surrenderBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                controller.surrender();
+            }
+        });
+        
+        disconnectBtn.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                disconnect();
+            }
+        });
         
         panel.add(Box.createVerticalStrut(10));
         panel.add(undoBtn);
@@ -122,26 +191,19 @@ public class OnlineGameView extends JFrame {
         panel.add(musicBtn);
         panel.add(Box.createVerticalStrut(10));
         panel.add(surrenderBtn);
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(disconnectBtn);
         
         return panel;
     }
     
     private void toggleMusic() {
-        controller.toggleMusic();
-        musicBtn.setText(controller.isMusicPlaying() ? "停止音乐" : "播放音乐");
+        JOptionPane.showMessageDialog(this, "音乐功能开发中...");
     }
     
-    private void surrender() {
-        int result = JOptionPane.showConfirmDialog(this, 
-            "确定要认输吗？", "认输确认", JOptionPane.YES_NO_OPTION);
-        if (result == JOptionPane.YES_OPTION) {
-            JOptionPane.showMessageDialog(this, "你已认输，游戏结束！");
-            // 这里可以添加网络通知对手的逻辑
-        }
-    }
-    
-    // 获取聊天面板（用于网络通信）
-    public ChatPanel getChatPanel() {
-        return chatPanel;
+    private void disconnect() {
+        controller.disconnect();
+        new NetworkSetupView();
+        dispose();
     }
 }
