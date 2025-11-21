@@ -1,140 +1,127 @@
-// 在ChessBoardView.java中添加setController方法
+// ChatPanel.java
 package view;
 
+import controller.ChatController;
 import javax.swing.*;
-
-import controller.GameController;
-import model.BoardModel;
-
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 
-public class ChessBoardView extends JPanel {
-    private static final int MARGIN = 30;
-    private static final int GRID_SPACING = 40;
+public class ChatPanel extends JPanel {
+    private JTextArea chatDisplay;
+    private JTextField messageInput;
+    private JButton sendButton;
+    private ChatController chatController;
+    private String username;
     
-    private int boardSize;
-    private GameController controller;
-    private StoneProvider stoneProvider; // 用于复盘模式
-    
-    // 棋子提供者接口（用于复盘）
-    public interface StoneProvider {
-        int getStone(int x, int y);
-    }
-    
-    public ChessBoardView(int size, GameController controller) {
-        this.boardSize = size;
-        this.controller = controller;
-        setPreferredSize(new Dimension(
-            MARGIN * 2 + GRID_SPACING * (size - 1),
-            MARGIN * 2 + GRID_SPACING * (size - 1)
-        ));
+    public ChatPanel(String username) {
+        this.username = username;
+        setLayout(new BorderLayout());
+        setPreferredSize(new Dimension(300, 400));
+        setBorder(BorderFactory.createTitledBorder("聊天室"));
         
-        // 只有在游戏模式下才添加鼠标监听
-        if (controller != null) {
-            addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    handleMouseClick(e.getX(), e.getY());
-                }
-            });
-        }
+        initializeComponents();
+        setupLayout();
+        setupEventListeners();
+    }
+ // 添加消息发送回调接口
+    public interface SendMessageCallback {
+        void onSendMessage(String message);
     }
     
-    // 设置控制器的方法
-    public void setController(GameController controller) {
-        this.controller = controller;
-        // 移除所有监听器再重新添加
-        removeAllMouseListeners();
-        if (controller != null) {
-            addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    handleMouseClick(e.getX(), e.getY());
-                }
-            });
-        }
+    private SendMessageCallback sendMessageCallback;
+    
+    // 设置发送消息回调
+    public void setSendMessageCallback(SendMessageCallback callback) {
+        this.sendMessageCallback = callback;
     }
- // 设置棋子提供者（用于复盘模式）
-    public void setStoneProvider(StoneProvider provider) {
-        this.stoneProvider = provider;
-        // 复盘模式下移除鼠标监听
-        removeAllMouseListeners();
-    }
-    private void removeAllMouseListeners() {
-        for (java.awt.event.MouseListener listener : getMouseListeners()) {
-            removeMouseListener(listener);
-        }
-    }
- 
-
-    private void handleMouseClick(int mouseX, int mouseY) {
-        if (controller == null) return;
+    private void initializeComponents() {
+        // 聊天显示区域
+        chatDisplay = new JTextArea();
+        chatDisplay.setEditable(false);
+        chatDisplay.setLineWrap(true);
+        chatDisplay.setWrapStyleWord(true);
+        chatDisplay.setBackground(new Color(240, 240, 240));
         
-        // 转换为棋盘坐标
-        int x = Math.round((float)(mouseX - MARGIN) / GRID_SPACING);
-        int y = Math.round((float)(mouseY - MARGIN) / GRID_SPACING);
+        // 添加滚动条
+        JScrollPane scrollPane = new JScrollPane(chatDisplay);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         
-        if (x >= 0 && x < boardSize && y >= 0 && y < boardSize) {
-            controller.handleMove(x, y);
-        }
-    }
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        drawBoard(g);
-        drawStones(g);
+        // 消息输入区域
+        messageInput = new JTextField();
+        messageInput.setToolTipText("输入消息...");
+        
+        // 发送按钮
+        sendButton = new JButton("发送");
+        
+        // 创建聊天控制器
+        chatController = new ChatController(chatDisplay, username);
     }
     
-    private void drawBoard(Graphics g) {
-        g.setColor(new Color(210, 180, 140)); // 棋盘背景色
-        g.fillRect(0, 0, getWidth(), getHeight());
+    private void setupLayout() {
+        // 聊天显示区域
+        JScrollPane scrollPane = new JScrollPane(chatDisplay);
+        scrollPane.setPreferredSize(new Dimension(280, 300));
+        add(scrollPane, BorderLayout.CENTER);
         
-        g.setColor(Color.BLACK);
-        // 画网格线
-        for (int i = 0; i < boardSize; i++) {
-            // 横线
-            g.drawLine(MARGIN, MARGIN + i * GRID_SPACING, 
-                      MARGIN + (boardSize - 1) * GRID_SPACING, MARGIN + i * GRID_SPACING);
-            // 竖线  
-            g.drawLine(MARGIN + i * GRID_SPACING, MARGIN,
-                      MARGIN + i * GRID_SPACING, MARGIN + (boardSize - 1) * GRID_SPACING);
-        }
+        // 输入面板
+        JPanel inputPanel = new JPanel(new BorderLayout());
+        inputPanel.add(messageInput, BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
+        
+        add(inputPanel, BorderLayout.SOUTH);
     }
     
-    private void drawStones(Graphics g) {
-        for (int i = 0; i < boardSize; i++) {
-            for (int j = 0; j < boardSize; j++) {
-                int stone = getStoneAt(i, j);
-                if (stone != BoardModel.EMPTY) {
-                    drawStone(g, i, j, stone == BoardModel.BLACK);
+    private void setupEventListeners() {
+        // 发送按钮点击事件
+        sendButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                sendMessage();
+            }
+        });
+        
+        // 输入框回车事件
+        messageInput.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    sendMessage();
                 }
             }
-        }
+        });
     }
     
-    private int getStoneAt(int x, int y) {
-        if (stoneProvider != null) {
-            // 复盘模式
-            return stoneProvider.getStone(x, y);
-        } else if (controller != null) {
-            // 游戏模式
-            return controller.getStone(x, y);
+    // 修改sendMessage方法
+    private void sendMessage() {
+        String message = messageInput.getText().trim();
+        if (!message.isEmpty()) {
+            if (sendMessageCallback != null) {
+                // 通过网络发送
+                sendMessageCallback.onSendMessage(message);
+            } else {
+                // 本地显示（单机模式）
+                chatController.sendMessage(message);
+            }
+            messageInput.setText("");
         }
-        return BoardModel.EMPTY;
+        messageInput.requestFocus();
     }
     
-    private void drawStone(Graphics g, int x, int y, boolean isBlack) {
-        g.setColor(isBlack ? Color.BLACK : Color.WHITE);
-        int centerX = MARGIN + x * GRID_SPACING;
-        int centerY = MARGIN + y * GRID_SPACING;
-        
-        g.fillOval(centerX - 18, centerY - 18, 36, 36);
-        
-        if (!isBlack) {
-            g.setColor(Color.BLACK);
-            g.drawOval(centerX - 18, centerY - 18, 36, 36);
-        }
+    // 接收消息的方法（用于网络对战）
+    public void receiveMessage(String sender, String content) {
+        chatController.receiveMessage(sender, content);
+    }
+    
+    // 清空聊天
+    public void clearChat() {
+        chatController.clearChat();
+    }
+    
+    // Getter方法
+    public ChatController getChatController() {
+        return chatController;
     }
 }
