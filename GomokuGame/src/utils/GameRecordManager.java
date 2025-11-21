@@ -1,6 +1,6 @@
 // GameRecordManager.java
 package utils;
-//修改
+
 import model.GameRecord;
 import javax.swing.*;
 import java.io.*;
@@ -84,5 +84,4 @@ public class GameRecordManager {
         File file = new File(SAVE_DIR + filename);
         return file.delete();
     }
-
 }
