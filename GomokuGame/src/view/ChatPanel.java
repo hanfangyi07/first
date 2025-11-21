@@ -26,7 +26,17 @@ public class ChatPanel extends JPanel {
         setupLayout();
         setupEventListeners();
     }
+ // 添加消息发送回调接口
+    public interface SendMessageCallback {
+        void onSendMessage(String message);
+    }
     
+    private SendMessageCallback sendMessageCallback;
+    
+    // 设置发送消息回调
+    public void setSendMessageCallback(SendMessageCallback callback) {
+        this.sendMessageCallback = callback;
+    }
     private void initializeComponents() {
         // 聊天显示区域
         chatDisplay = new JTextArea();
@@ -84,10 +94,17 @@ public class ChatPanel extends JPanel {
         });
     }
     
+    // 修改sendMessage方法
     private void sendMessage() {
         String message = messageInput.getText().trim();
         if (!message.isEmpty()) {
-            chatController.sendMessage(message);
+            if (sendMessageCallback != null) {
+                // 通过网络发送
+                sendMessageCallback.onSendMessage(message);
+            } else {
+                // 本地显示（单机模式）
+                chatController.sendMessage(message);
+            }
             messageInput.setText("");
         }
         messageInput.requestFocus();
